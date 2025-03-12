@@ -22,6 +22,16 @@ const PlayerContextProvider = (props) => {
   const [loading, setLoading] = useState(true); // Start with loading state
   const [error, setError] = useState(null);
 
+  // Tự động ẩn lỗi sau 5 giây
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   // Load Spotify data on mount
   useEffect(() => {
     loadSpotifyData();
@@ -87,10 +97,23 @@ const PlayerContextProvider = (props) => {
         // Get full track details
         const trackData = await spotifyService.getTrack(id);
 
-        // Check if preview URL exists
+        // Check if preview URL exists - sửa đổi cách xử lý khi không có preview
         if (!trackData.preview_url) {
-          setError("No preview available for this track");
+          // Set track data anyway so the UI shows the track info
+          setTrack({
+            ...trackData,
+            id: trackData.id,
+            name: trackData.name,
+            desc: trackData.artists.map((artist) => artist.name).join(", "),
+            image:
+              trackData.album?.images?.[0]?.url ||
+              "https://via.placeholder.com/300?text=No+Preview",
+            audioSrc: null, // No audio available
+          });
+
           setLoading(false);
+          setError("No preview available for this track");
+          setPlayStatus(false);
           return;
         }
 
@@ -99,6 +122,9 @@ const PlayerContextProvider = (props) => {
           ...trackData,
           audioSrc: trackData.preview_url,
           id: trackData.id,
+          name: trackData.name,
+          desc: trackData.artists.map((artist) => artist.name).join(", "),
+          image: trackData.album?.images?.[0]?.url,
         });
 
         setLoading(false);
@@ -171,11 +197,15 @@ const PlayerContextProvider = (props) => {
 
         setTime({
           currentTime: {
-            second: Math.floor(audioRef.current.currentTime % 60),
+            second: Math.floor(audioRef.current.currentTime % 60)
+              .toString()
+              .padStart(2, "0"),
             minute: Math.floor(audioRef.current.currentTime / 60),
           },
           totalTime: {
-            second: Math.floor(audioRef.current.duration % 60),
+            second: Math.floor(audioRef.current.duration % 60)
+              .toString()
+              .padStart(2, "0"),
             minute: Math.floor(audioRef.current.duration / 60),
           },
         });
