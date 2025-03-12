@@ -19,26 +19,26 @@ const DisplayHome = () => {
   const tracks = hasSpotifyTracks ? spotifyTracks : songsData;
 
   return (
-    <div className="flex-1 bg-gradient-to-b from-[#1e1e1e] to-[#121212] pb-28 px-6 pt-4 overflow-auto">
+    <div className="px-6 py-4">
       <Navbar />
 
-      {/* Error message styled like Spotify's red banner */}
+      {/* Display error message if any */}
       {error && (
-        <div className="bg-[#e91429] text-white p-3 mb-6 rounded text-sm font-medium">
+        <div className="bg-[#e91429] p-3 my-4 rounded text-white text-sm font-medium">
           {error}
         </div>
       )}
 
       {/* Loading indicator */}
       {loading && (
-        <div className="flex justify-center my-8">
+        <div className="flex justify-center my-4">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1DB954]"></div>
         </div>
       )}
 
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white my-5">Featured Albums</h1>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <h1 className="my-5 font-bold text-2xl">Featured Albums</h1>
+        <div className="flex overflow-x-auto gap-6 pb-4 scrollbar-hide">
           {albums.map((item, index) => (
             <AlbumItem
               key={item.id || index}
@@ -60,10 +60,8 @@ const DisplayHome = () => {
       </div>
 
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white my-5">
-          Today's Biggest Hits
-        </h1>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <h1 className="my-5 font-bold text-2xl">Today's Biggest Hits</h1>
+        <div className="flex overflow-x-auto gap-6 pb-4 scrollbar-hide">
           {tracks.map((item, index) => (
             <SongItem
               key={item.id || index}

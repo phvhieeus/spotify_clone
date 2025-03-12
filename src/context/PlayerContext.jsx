@@ -12,8 +12,8 @@ const PlayerContextProvider = (props) => {
   const [track, setTrack] = useState(songsData[0]);
   const [playStatus, setPlayStatus] = useState(false);
   const [time, setTime] = useState({
-    currentTime: { second: 0, minute: 0 },
-    totalTime: { second: 0, minute: 0 },
+    currentTime: { second: "00", minute: 0 },
+    totalTime: { second: "00", minute: 0 },
   });
 
   // States for Spotify data
@@ -22,12 +22,12 @@ const PlayerContextProvider = (props) => {
   const [loading, setLoading] = useState(true); // Start with loading state
   const [error, setError] = useState(null);
 
-  // Tự động ẩn lỗi sau 5 giây
+  // Auto-hide error message after 10 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
         setError(null);
-      }, 5000);
+      }, 10000);
       return () => clearTimeout(timer);
     }
   }, [error]);
@@ -97,35 +97,29 @@ const PlayerContextProvider = (props) => {
         // Get full track details
         const trackData = await spotifyService.getTrack(id);
 
-        // Check if preview URL exists - sửa đổi cách xử lý khi không có preview
-        if (!trackData.preview_url) {
-          // Set track data anyway so the UI shows the track info
-          setTrack({
-            ...trackData,
-            id: trackData.id,
-            name: trackData.name,
-            desc: trackData.artists.map((artist) => artist.name).join(", "),
-            image:
-              trackData.album?.images?.[0]?.url ||
-              "https://via.placeholder.com/300?text=No+Preview",
-            audioSrc: null, // No audio available
-          });
+        // Set track data always
+        const trackInfo = {
+          ...trackData,
+          id: trackData.id,
+          name: trackData.name,
+          desc: trackData.artists.map((artist) => artist.name).join(", "),
+          image:
+            trackData.album?.images?.[0]?.url ||
+            "https://via.placeholder.com/300?text=No+Preview",
+        };
 
+        // Check if preview URL exists
+        if (!trackData.preview_url) {
+          setTrack(trackInfo);
           setLoading(false);
           setError("No preview available for this track");
           setPlayStatus(false);
           return;
         }
 
-        // Set current track
-        setTrack({
-          ...trackData,
-          audioSrc: trackData.preview_url,
-          id: trackData.id,
-          name: trackData.name,
-          desc: trackData.artists.map((artist) => artist.name).join(", "),
-          image: trackData.album?.images?.[0]?.url,
-        });
+        // Add audio source to track info
+        trackInfo.audioSrc = trackData.preview_url;
+        setTrack(trackInfo);
 
         setLoading(false);
 
