@@ -2,12 +2,16 @@
 import { createContext, useEffect, useRef, useState } from "react";
 import { songsData } from "../assets/assets";
 import spotifyService from "../services/spotify";
+import { searchYouTubeVideo } from "../services/youtube"; // Import YouTube service
 
 export const PlayerContext = createContext();
 const PlayerContextProvider = (props) => {
   const audioRef = useRef();
   const seekBg = useRef();
   const seekBar = useRef();
+
+  // Add YouTube player refs
+  const youtubePlayerRef = useRef(null);
 
   const [track, setTrack] = useState(songsData[0]);
   const [playStatus, setPlayStatus] = useState(false);
@@ -16,11 +20,131 @@ const PlayerContextProvider = (props) => {
     totalTime: { second: "00", minute: 0 },
   });
 
+  // Add YouTube states
+  const [youtubeVideoId, setYoutubeVideoId] = useState(null);
+  const [usingYouTube, setUsingYouTube] = useState(false);
+  const [youtubeAPIReady, setYoutubeAPIReady] = useState(false);
+
   // States for Spotify data
   const [spotifyTracks, setSpotifyTracks] = useState([]);
   const [spotifyAlbums, setSpotifyAlbums] = useState([]);
-  const [loading, setLoading] = useState(true); // Start with loading state
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Load YouTube API
+  useEffect(() => {
+    // Add YouTube iframe API
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName("script")[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    window.onYouTubeIframeAPIReady = () => {
+      setYoutubeAPIReady(true);
+    };
+
+    return () => {
+      window.onYouTubeIframeAPIReady = null;
+    };
+  }, []);
+
+  // Initialize YouTube player
+  useEffect(() => {
+    if (youtubeAPIReady && !youtubePlayerRef.current && window.YT) {
+      youtubePlayerRef.current = new window.YT.Player("youtube-player", {
+        height: "0",
+        width: "0",
+        playerVars: {
+          autoplay: 0,
+          controls: 0,
+        },
+        events: {
+          onStateChange: (event) => {
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setPlayStatus(true);
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              setPlayStatus(false);
+            } else if (event.data === window.YT.PlayerState.ENDED) {
+              setPlayStatus(false);
+            }
+          },
+        },
+      });
+    }
+  }, [youtubeAPIReady]);
+
+  // Load video when ID changes
+  useEffect(() => {
+    if (
+      youtubeVideoId &&
+      youtubePlayerRef.current &&
+      youtubePlayerRef.current.loadVideoById
+    ) {
+      youtubePlayerRef.current.loadVideoById(youtubeVideoId);
+      if (playStatus) {
+        youtubePlayerRef.current.playVideo();
+      }
+    }
+  }, [youtubeVideoId]);
+
+  // Update YouTube playback status
+  useEffect(() => {
+    if (usingYouTube && youtubePlayerRef.current) {
+      if (playStatus) {
+        youtubePlayerRef.current.playVideo();
+      } else {
+        youtubePlayerRef.current.pauseVideo();
+      }
+    }
+  }, [playStatus, usingYouTube]);
+
+  // Update seekbar for YouTube
+  useEffect(() => {
+    let intervalId;
+
+    if (usingYouTube && youtubePlayerRef.current && playStatus) {
+      intervalId = setInterval(() => {
+        if (
+          youtubePlayerRef.current &&
+          youtubePlayerRef.current.getCurrentTime &&
+          seekBar.current
+        ) {
+          try {
+            const currentTime = youtubePlayerRef.current.getCurrentTime() || 0;
+            const duration = youtubePlayerRef.current.getDuration() || 0;
+
+            if (duration > 0) {
+              const percentage = (currentTime / duration) * 100;
+              seekBar.current.style.width = `${Math.floor(percentage)}%`;
+
+              setTime({
+                currentTime: {
+                  second: Math.floor(currentTime % 60)
+                    .toString()
+                    .padStart(2, "0"),
+                  minute: Math.floor(currentTime / 60),
+                },
+                totalTime: {
+                  second: Math.floor(duration % 60)
+                    .toString()
+                    .padStart(2, "0"),
+                  minute: Math.floor(duration / 60),
+                },
+              });
+            }
+          } catch (err) {
+            // Handle YouTube API errors silently
+          }
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [usingYouTube, playStatus]);
 
   // Auto-hide error message after 10 seconds
   useEffect(() => {
@@ -65,8 +189,38 @@ const PlayerContextProvider = (props) => {
     }
   };
 
+  // Try YouTube for full playback
+  const tryYouTube = async () => {
+    try {
+      setError("Đang tìm bài hát trên YouTube...");
+
+      const videoId = await searchYouTubeVideo(
+        track.name,
+        track.desc ||
+          (track.artists ? track.artists.map((a) => a.name).join(", ") : "")
+      );
+
+      if (videoId) {
+        setYoutubeVideoId(videoId);
+        setUsingYouTube(true);
+        setError(null);
+        setPlayStatus(true);
+      } else {
+        setError("Không tìm thấy bài hát trên YouTube");
+      }
+    } catch (err) {
+      console.error("YouTube error:", err);
+      setError("Không thể phát nhạc từ YouTube");
+    }
+  };
+
   const play = () => {
-    if (audioRef.current) {
+    if (usingYouTube) {
+      if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.playVideo();
+        setPlayStatus(true);
+      }
+    } else if (audioRef.current) {
       const playPromise = audioRef.current.play();
 
       if (playPromise !== undefined) {
@@ -76,13 +230,20 @@ const PlayerContextProvider = (props) => {
           })
           .catch((error) => {
             console.error("Playback error:", error);
+            // Try YouTube if Spotify preview fails
+            tryYouTube();
           });
       }
     }
   };
 
   const pause = () => {
-    if (audioRef.current) {
+    if (usingYouTube) {
+      if (youtubePlayerRef.current) {
+        youtubePlayerRef.current.pauseVideo();
+        setPlayStatus(false);
+      }
+    } else if (audioRef.current) {
       audioRef.current.pause();
       setPlayStatus(false);
     }
@@ -93,11 +254,12 @@ const PlayerContextProvider = (props) => {
       if (isSpotifyTrack) {
         setLoading(true);
         setError(null);
+        setUsingYouTube(false); // Reset YouTube state
 
-        // Get full track details
+        // Get track details from Spotify
         const trackData = await spotifyService.getTrack(id);
 
-        // Set track data always
+        // Set track data
         const trackInfo = {
           ...trackData,
           id: trackData.id,
@@ -108,40 +270,36 @@ const PlayerContextProvider = (props) => {
             "https://via.placeholder.com/300?text=No+Preview",
         };
 
-        // Check if preview URL exists
-        if (!trackData.preview_url) {
-          setTrack(trackInfo);
-          setLoading(false);
-          setError("No preview available for this track");
-          setPlayStatus(false);
-          return;
-        }
-
-        // Add audio source to track info
-        trackInfo.audioSrc = trackData.preview_url;
         setTrack(trackInfo);
 
-        setLoading(false);
+        // Check if preview URL exists
+        if (trackData.preview_url) {
+          trackInfo.audioSrc = trackData.preview_url;
+          setTrack(trackInfo);
 
-        // Play after a short delay
-        setTimeout(() => {
-          if (audioRef.current) {
-            const playPromise = audioRef.current.play();
-
-            if (playPromise !== undefined) {
-              playPromise
+          setTimeout(() => {
+            if (audioRef.current) {
+              audioRef.current
+                .play()
                 .then(() => {
                   setPlayStatus(true);
                 })
                 .catch((error) => {
-                  console.error("Playback error:", error);
-                  setError("Could not play this track");
+                  console.error("Spotify preview error:", error);
+                  // Try YouTube if Spotify preview fails
+                  tryYouTube();
                 });
             }
-          }
-        }, 100);
+          }, 100);
+        } else {
+          // No preview URL, try YouTube directly
+          tryYouTube();
+        }
+
+        setLoading(false);
       } else {
         // Play local track
+        setUsingYouTube(false);
         setTrack(songsData[id]);
         setTimeout(() => {
           audioRef.current
@@ -149,13 +307,15 @@ const PlayerContextProvider = (props) => {
             .then(() => setPlayStatus(true))
             .catch((error) => {
               console.error("Local playback error:", error);
+              tryYouTube();
             });
         }, 100);
       }
     } catch (error) {
       console.error("Error playing track:", error);
-      setError("Could not play this track");
+      setError("Không thể phát bài hát này");
       setLoading(false);
+      tryYouTube();
     }
   };
 
@@ -174,7 +334,16 @@ const PlayerContextProvider = (props) => {
   };
 
   const seekSong = (e) => {
-    if (audioRef.current && seekBg.current) {
+    if (usingYouTube && youtubePlayerRef.current) {
+      try {
+        const duration = youtubePlayerRef.current.getDuration();
+        const newTime =
+          (e.nativeEvent.offsetX / seekBg.current.offsetWidth) * duration;
+        youtubePlayerRef.current.seekTo(newTime);
+      } catch (err) {
+        console.error("Lỗi khi tua video YouTube:", err);
+      }
+    } else if (audioRef.current && seekBg.current) {
       audioRef.current.currentTime =
         (e.nativeEvent.offsetX / seekBg.current.offsetWidth) *
         audioRef.current.duration;
@@ -234,21 +403,32 @@ const PlayerContextProvider = (props) => {
     previous,
     next,
     seekSong,
+    // Add YouTube-related values
+    usingYouTube,
+    tryYouTube,
+    error,
     // Spotify-related values
     spotifyTracks,
     spotifyAlbums,
     loading,
-    error,
     loadSpotifyData,
   };
 
   return (
     <PlayerContext.Provider value={contextValue}>
       {props.children}
+      <div id="youtube-player" style={{ display: "none" }}></div>
       <audio
         ref={audioRef}
         src={track.audioSrc || track.preview_url}
-        onEnded={() => setPlayStatus(false)}
+        onEnded={() => {
+          // When Spotify preview ends (30 sec), try YouTube for full song
+          if (audioRef.current && audioRef.current.duration <= 31) {
+            tryYouTube();
+          } else {
+            setPlayStatus(false);
+          }
+        }}
       />
     </PlayerContext.Provider>
   );
