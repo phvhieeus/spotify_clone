@@ -3,6 +3,8 @@ import { createContext, useEffect, useRef, useState } from "react";
 import { songsData } from "../assets/assets";
 import spotifyService from "../services/spotify";
 import { searchYouTubeVideo } from "../services/youtube"; // Import YouTube service
+// Thêm import listenHistoryService
+import listenHistoryService from "../services/listenHistoryService";
 
 export const PlayerContext = createContext();
 const PlayerContextProvider = (props) => {
@@ -66,6 +68,8 @@ const PlayerContextProvider = (props) => {
               setPlayStatus(false);
             } else if (event.data === window.YT.PlayerState.ENDED) {
               setPlayStatus(false);
+              // Thêm gọi onPlaybackCompleted khi video kết thúc
+              onPlaybackCompleted();
             }
           },
         },
@@ -249,6 +253,19 @@ const PlayerContextProvider = (props) => {
     }
   };
 
+  // Thêm hàm xử lý khi hoàn thành bài hát
+  const onPlaybackCompleted = () => {
+    if (track && track.id) {
+      // Đảm bảo bài hát hiện tại được lưu vào lịch sử
+      if (track.artists) {
+        listenHistoryService.addToHistory(track);
+      }
+
+      // Thông báo lịch sử đã được cập nhật
+      window.dispatchEvent(new CustomEvent("historyUpdated"));
+    }
+  };
+
   const playWithId = async (id, isSpotifyTrack = false) => {
     try {
       if (isSpotifyTrack) {
@@ -271,6 +288,9 @@ const PlayerContextProvider = (props) => {
         };
 
         setTrack(trackInfo);
+
+        // Thêm bài hát vào lịch sử nghe ở đây
+        listenHistoryService.addToHistory(trackData);
 
         // Check if preview URL exists
         if (trackData.preview_url) {
@@ -427,6 +447,8 @@ const PlayerContextProvider = (props) => {
             tryYouTube();
           } else {
             setPlayStatus(false);
+            // Thêm gọi onPlaybackCompleted khi audio kết thúc
+            onPlaybackCompleted();
           }
         }}
       />
