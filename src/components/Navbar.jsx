@@ -1,6 +1,8 @@
+// src/components/Navbar.jsx
 import React from "react";
 import { assets } from "../assets/assets";
 import { useNavigate } from "react-router-dom";
+import SearchComponent from "./SearchComponent";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -33,7 +35,11 @@ const Navbar = () => {
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-2 mt-4">
+
+      {/* Add the search component */}
+      <SearchComponent />
+
+      <div className="flex items-center gap-2 mt-2">
         <p className="bg-white text-black px-4 py-1 rounded-2xl cursor-pointer">
           All
         </p>

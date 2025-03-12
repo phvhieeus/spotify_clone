@@ -1,21 +1,26 @@
-import React, { useContext } from "react";
-import SideBar from "./components/SideBar";
+import React from "react";
+import { Routes, Route } from "react-router-dom"; // Remove BrowserRouter from here
+import DisplayHome from "./components/DisplayHome";
+import DisplayAlbum from "./components/DisplayAlbum";
 import Player from "./components/Player";
-import Display from "./components/Display";
-import { PlayerContext } from "./context/PlayerContext";
+import SideBar from "./components/SideBar";
+import PlayerContextProvider from "./context/PlayerContext";
 
-const App = () => {
-  const { audioRef, track } = useContext(PlayerContext);
+function App() {
   return (
-    <div className="h-screen bg-black">
-      <div className="h-[90%] flex">
+    <PlayerContextProvider>
+      <div className="App bg-[#121212] h-screen text-white p-2 pb-24 overflow-hidden flex">
         <SideBar />
-        <Display />
+        <div className="h-full w-full lg:w-[75%] p-2 overflow-y-auto">
+          <Routes>
+            <Route path="/" element={<DisplayHome />} />
+            <Route path="/album/:id" element={<DisplayAlbum />} />
+          </Routes>
+        </div>
+        <Player />
       </div>
-      <Player />
-      <audio ref={audioRef} src={track.file} preload="auto"></audio>
-    </div>
+    </PlayerContextProvider>
   );
-};
+}
 
 export default App;

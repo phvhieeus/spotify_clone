@@ -1,5 +1,7 @@
+// src/context/PlayerContext.jsx
 import { createContext, useEffect, useRef, useState } from "react";
 import { songsData } from "../assets/assets";
+import spotifyService from "../services/spotify";
 
 export const PlayerContext = createContext();
 const PlayerContextProvider = (props) => {
@@ -14,51 +16,159 @@ const PlayerContextProvider = (props) => {
     totalTime: { second: 0, minute: 0 },
   });
 
+  // States for Spotify data
+  const [spotifyTracks, setSpotifyTracks] = useState([]);
+  const [spotifyAlbums, setSpotifyAlbums] = useState([]);
+  const [loading, setLoading] = useState(true); // Start with loading state
+  const [error, setError] = useState(null);
+
+  // Load Spotify data on mount
+  useEffect(() => {
+    loadSpotifyData();
+  }, []);
+
+  const loadSpotifyData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Try to load new releases
+      const newReleases = await spotifyService.getNewReleases();
+      if (newReleases?.albums?.items) {
+        setSpotifyAlbums(newReleases.albums.items);
+      }
+
+      // Use search for popular tracks instead of playlist (works with client credentials)
+      const popTracks = await spotifyService.getPopularGenreTracks("pop");
+      if (popTracks?.tracks?.items) {
+        setSpotifyTracks(popTracks.tracks.items);
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to load Spotify data:", err);
+      setError("Failed to load Spotify data. Using local data instead.");
+      // Reset to empty arrays to trigger fallback to local data
+      setSpotifyAlbums([]);
+      setSpotifyTracks([]);
+      setLoading(false);
+    }
+  };
+
   const play = () => {
-    audioRef.current.play();
-    setPlayStatus(true);
+    if (audioRef.current) {
+      const playPromise = audioRef.current.play();
+
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setPlayStatus(true);
+          })
+          .catch((error) => {
+            console.error("Playback error:", error);
+          });
+      }
+    }
   };
 
   const pause = () => {
-    audioRef.current.pause();
-    setPlayStatus(false);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setPlayStatus(false);
+    }
   };
 
-  const playWithId = async (id) => {
-    await setTrack(songsData[id]);
-    await audioRef.current.play();
-    setPlayStatus(true);
+  const playWithId = async (id, isSpotifyTrack = false) => {
+    try {
+      if (isSpotifyTrack) {
+        setLoading(true);
+        setError(null);
+
+        // Get full track details
+        const trackData = await spotifyService.getTrack(id);
+
+        // Check if preview URL exists
+        if (!trackData.preview_url) {
+          setError("No preview available for this track");
+          setLoading(false);
+          return;
+        }
+
+        // Set current track
+        setTrack({
+          ...trackData,
+          audioSrc: trackData.preview_url,
+          id: trackData.id,
+        });
+
+        setLoading(false);
+
+        // Play after a short delay
+        setTimeout(() => {
+          if (audioRef.current) {
+            const playPromise = audioRef.current.play();
+
+            if (playPromise !== undefined) {
+              playPromise
+                .then(() => {
+                  setPlayStatus(true);
+                })
+                .catch((error) => {
+                  console.error("Playback error:", error);
+                  setError("Could not play this track");
+                });
+            }
+          }
+        }, 100);
+      } else {
+        // Play local track
+        setTrack(songsData[id]);
+        setTimeout(() => {
+          audioRef.current
+            .play()
+            .then(() => setPlayStatus(true))
+            .catch((error) => {
+              console.error("Local playback error:", error);
+            });
+        }, 100);
+      }
+    } catch (error) {
+      console.error("Error playing track:", error);
+      setError("Could not play this track");
+      setLoading(false);
+    }
   };
 
-  const previous = async () => {
+  const previous = () => {
     if (track.id > 0) {
-      await setTrack(songsData[track.id - 1]);
-      await audioRef.current.play();
-      setPlayStatus(true);
+      setTrack(songsData[track.id - 1]);
+      play();
     }
   };
 
-  const next = async () => {
+  const next = () => {
     if (track.id < songsData.length - 1) {
-      await setTrack(songsData[track.id + 1]);
-      await audioRef.current.play();
-      setPlayStatus(true);
+      setTrack(songsData[track.id + 1]);
+      play();
     }
   };
 
-  const seekSong = async (e) => {
-    audioRef.current.currentTime =
-      (e.nativeEvent.offsetX / seekBg.current.offsetWidth) *
-      audioRef.current.duration;
+  const seekSong = (e) => {
+    if (audioRef.current && seekBg.current) {
+      audioRef.current.currentTime =
+        (e.nativeEvent.offsetX / seekBg.current.offsetWidth) *
+        audioRef.current.duration;
+    }
   };
 
+  // Use cleanup for event listeners
   useEffect(() => {
-    setTimeout(() => {
-      audioRef.current.ontimeupdate = () => {
-        seekBar.current.style.width =
-          Math.floor(
-            (audioRef.current.currentTime / audioRef.current.duration) * 100
-          ) + "%";
+    const timeUpdateHandler = () => {
+      if (audioRef.current && seekBar.current && audioRef.current.duration) {
+        const percentage =
+          (audioRef.current.currentTime / audioRef.current.duration) * 100;
+        seekBar.current.style.width = `${Math.floor(percentage)}%`;
+
         setTime({
           currentTime: {
             second: Math.floor(audioRef.current.currentTime % 60),
@@ -69,9 +179,20 @@ const PlayerContextProvider = (props) => {
             minute: Math.floor(audioRef.current.duration / 60),
           },
         });
-      };
-    }, 1000);
-  }, [audioRef]);
+      }
+    };
+
+    const current = audioRef.current;
+    if (current) {
+      current.addEventListener("timeupdate", timeUpdateHandler);
+    }
+
+    return () => {
+      if (current) {
+        current.removeEventListener("timeupdate", timeUpdateHandler);
+      }
+    };
+  }, []);
 
   const contextValue = {
     audioRef,
@@ -89,10 +210,22 @@ const PlayerContextProvider = (props) => {
     previous,
     next,
     seekSong,
+    // Spotify-related values
+    spotifyTracks,
+    spotifyAlbums,
+    loading,
+    error,
+    loadSpotifyData,
   };
+
   return (
     <PlayerContext.Provider value={contextValue}>
       {props.children}
+      <audio
+        ref={audioRef}
+        src={track.audioSrc || track.preview_url}
+        onEnded={() => setPlayStatus(false)}
+      />
     </PlayerContext.Provider>
   );
 };
