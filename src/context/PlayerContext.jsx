@@ -289,8 +289,11 @@ const PlayerContextProvider = (props) => {
 
         setTrack(trackInfo);
 
-        // Thêm bài hát vào lịch sử nghe ở đây
+        // Thêm bài hát vào lịch sử nghe ngay khi bắt đầu phát
         listenHistoryService.addToHistory(trackData);
+
+        // Cập nhật khuyến nghị ngay lập tức
+        window.dispatchEvent(new CustomEvent("historyUpdated"));
 
         // Check if preview URL exists
         if (trackData.preview_url) {

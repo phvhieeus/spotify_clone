@@ -141,6 +141,40 @@ class SpotifyService {
       throw error;
     }
   }
+
+  // Thêm hàm mới: Lấy top tracks của nghệ sĩ
+  async getArtistTopTracks(artistId, country = "VN") {
+    try {
+      return await this.makeApiRequest(
+        `/artists/${artistId}/top-tracks?market=${country}`
+      );
+    } catch (error) {
+      console.error(`Failed to get top tracks for artist ${artistId}:`, error);
+      throw error;
+    }
+  }
+
+  // Thêm hàm mới: Lấy album của nghệ sĩ
+  async getArtistAlbums(artistId, limit = 10) {
+    try {
+      return await this.makeApiRequest(
+        `/artists/${artistId}/albums?limit=${limit}`
+      );
+    } catch (error) {
+      console.error(`Failed to get albums for artist ${artistId}:`, error);
+      throw error;
+    }
+  }
+
+  // Thêm hàm mới: Lấy thông tin về nghệ sĩ
+  async getArtist(artistId) {
+    try {
+      return await this.makeApiRequest(`/artists/${artistId}`);
+    } catch (error) {
+      console.error(`Failed to get artist ${artistId}:`, error);
+      throw error;
+    }
+  }
 }
 
 const spotifyService = new SpotifyService();

@@ -94,6 +94,16 @@ class ListenHistoryService {
     return sortedArtists;
   }
 
+  // Thêm hàm mới: Lấy nghệ sĩ hiện tại đang nghe
+  getCurrentArtist() {
+    if (this.history.length === 0) return null;
+    const latestTrack = this.history[0];
+    if (latestTrack.artists && latestTrack.artists.length > 0) {
+      return latestTrack.artists[0];
+    }
+    return null;
+  }
+
   // Xóa lịch sử
   clearHistory() {
     this.history = [];

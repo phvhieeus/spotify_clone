@@ -6,6 +6,7 @@ import AlbumItem from "./AlbumItem";
 import SongItem from "./SongItem";
 import { PlayerContext } from "../context/PlayerContext";
 import recommendationService from "../services/recommendationService";
+import listenHistoryService from "../services/listenHistoryService";
 
 const DisplayHome = () => {
   const { spotifyAlbums, spotifyTracks, loading, error } =
@@ -14,6 +15,9 @@ const DisplayHome = () => {
   // State để lưu bài hát được đề xuất
   const [recommendedTracks, setRecommendedTracks] = useState([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [recommendationTitle, setRecommendationTitle] = useState(
+    "Made for You • Dành cho bạn"
+  );
 
   // Choose which data to display
   const hasSpotifyAlbums = spotifyAlbums && spotifyAlbums.length > 0;
@@ -27,10 +31,19 @@ const DisplayHome = () => {
   const loadRecommendations = async () => {
     setLoadingRecommendations(true);
     try {
+      // Lấy đề xuất từ service
       const recommendations = await recommendationService.getMadeForYouTracks(
         8
       );
       setRecommendedTracks(recommendations);
+
+      // Cập nhật tiêu đề dựa trên nghệ sĩ hiện tại
+      const currentArtist = listenHistoryService.getCurrentArtist();
+      if (currentArtist) {
+        setRecommendationTitle(`Made for You • Songs of ${currentArtist.name}`);
+      } else {
+        setRecommendationTitle("Made for You");
+      }
     } catch (err) {
       console.error("Error loading recommendations:", err);
     } finally {
@@ -86,7 +99,10 @@ const DisplayHome = () => {
       {/* Made for You Section - Đặt ở đầu để nhấn mạnh */}
       <div className="mb-8">
         <h1 className="my-5 font-bold text-2xl">
-          <span className="text-[#1DB954]">Made for You</span> • Dành cho bạn
+          <span className="text-[#1DB954]">
+            {recommendationTitle.split(" • ")[0]}
+          </span>{" "}
+          • {recommendationTitle.split(" • ")[1]}
         </h1>
         {loadingRecommendations ? (
           <div className="flex justify-center my-4">
