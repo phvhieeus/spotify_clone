@@ -57,7 +57,7 @@ const PlayerContextProvider = (props) => {
         height: "0",
         width: "0",
         playerVars: {
-          autoplay: 0,
+          autoplay: 1, // Thay đổi từ 0 thành 1 để tự động phát
           controls: 0,
         },
         events: {
@@ -85,9 +85,8 @@ const PlayerContextProvider = (props) => {
       youtubePlayerRef.current.loadVideoById
     ) {
       youtubePlayerRef.current.loadVideoById(youtubeVideoId);
-      if (playStatus) {
-        youtubePlayerRef.current.playVideo();
-      }
+      // Tự động phát video khi ID thay đổi
+      youtubePlayerRef.current.playVideo();
     }
   }, [youtubeVideoId]);
 
@@ -193,10 +192,14 @@ const PlayerContextProvider = (props) => {
     }
   };
 
-  // Try YouTube for full playback
+  // Try YouTube for full playback - đã cập nhật
   const tryYouTube = async () => {
     try {
       setError("Đang tìm bài hát trên YouTube...");
+      setLoading(true);
+
+      // Đặt playStatus = true ngay lập tức
+      setPlayStatus(true);
 
       const videoId = await searchYouTubeVideo(
         track.name,
@@ -208,13 +211,16 @@ const PlayerContextProvider = (props) => {
         setYoutubeVideoId(videoId);
         setUsingYouTube(true);
         setError(null);
-        setPlayStatus(true);
       } else {
         setError("Không tìm thấy bài hát trên YouTube");
+        setPlayStatus(false);
       }
     } catch (err) {
       console.error("YouTube error:", err);
       setError("Không thể phát nhạc từ YouTube");
+      setPlayStatus(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -266,17 +272,33 @@ const PlayerContextProvider = (props) => {
     }
   };
 
+  // Đã cập nhật hàm playWithId để phát nhạc ngay lập tức
   const playWithId = async (id, isSpotifyTrack = false) => {
     try {
-      if (isSpotifyTrack) {
-        setLoading(true);
-        setError(null);
-        setUsingYouTube(false); // Reset YouTube state
+      // Đặt trạng thái loading và xóa lỗi
+      setLoading(true);
+      setError(null);
 
+      // Reset trạng thái YouTube
+      setUsingYouTube(false);
+
+      // Đặt playStatus = true ngay từ đầu để UI phản hồi ngay lập tức
+      setPlayStatus(true);
+
+      // Dừng phát nhạc hiện tại trước khi chuyển sang bài mới
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+
+      if (youtubePlayerRef.current && youtubePlayerRef.current.pauseVideo) {
+        youtubePlayerRef.current.pauseVideo();
+      }
+
+      if (isSpotifyTrack) {
         // Get track details from Spotify
         const trackData = await spotifyService.getTrack(id);
 
-        // Set track data
+        // Thiết lập thông tin bài hát
         const trackInfo = {
           ...trackData,
           id: trackData.id,
@@ -287,58 +309,53 @@ const PlayerContextProvider = (props) => {
             "https://via.placeholder.com/300?text=No+Preview",
         };
 
+        // Cập nhật track ngay lập tức
         setTrack(trackInfo);
 
-        // Thêm bài hát vào lịch sử nghe ngay khi bắt đầu phát
+        // Thêm bài hát vào lịch sử ngay
         listenHistoryService.addToHistory(trackData);
-
-        // Cập nhật khuyến nghị ngay lập tức
         window.dispatchEvent(new CustomEvent("historyUpdated"));
 
-        // Check if preview URL exists
+        // Xử lý phát nhạc - thử Spotify trước
         if (trackData.preview_url) {
-          trackInfo.audioSrc = trackData.preview_url;
-          setTrack(trackInfo);
+          // Đặt source mới
+          if (audioRef.current) {
+            audioRef.current.src = trackData.preview_url;
+            audioRef.current.load(); // Quan trọng: load() trước khi play()
 
-          setTimeout(() => {
-            if (audioRef.current) {
-              audioRef.current
-                .play()
-                .then(() => {
-                  setPlayStatus(true);
-                })
-                .catch((error) => {
-                  console.error("Spotify preview error:", error);
-                  // Try YouTube if Spotify preview fails
-                  tryYouTube();
-                });
-            }
-          }, 100);
+            // Phát nhạc ngay lập tức
+            audioRef.current.play().catch((error) => {
+              console.error("Spotify preview error:", error);
+              tryYouTube(); // Thử YouTube nếu lỗi
+            });
+          }
         } else {
-          // No preview URL, try YouTube directly
+          // Không có preview URL, chuyển sang YouTube ngay
           tryYouTube();
         }
-
-        setLoading(false);
       } else {
-        // Play local track
+        // Phát bài hát local
         setUsingYouTube(false);
         setTrack(songsData[id]);
-        setTimeout(() => {
-          audioRef.current
-            .play()
-            .then(() => setPlayStatus(true))
-            .catch((error) => {
-              console.error("Local playback error:", error);
-              tryYouTube();
-            });
-        }, 100);
+
+        if (audioRef.current) {
+          // Đặt src mới
+          audioRef.current.src = songsData[id].audioSrc;
+          audioRef.current.load(); // Quan trọng: load() trước khi play()
+
+          // Phát ngay lập tức
+          audioRef.current.play().catch((error) => {
+            console.error("Local playback error:", error);
+            tryYouTube();
+          });
+        }
       }
     } catch (error) {
       console.error("Error playing track:", error);
       setError("Không thể phát bài hát này");
-      setLoading(false);
       tryYouTube();
+    } finally {
+      setLoading(false); // Đảm bảo reset loading khi hoàn thành
     }
   };
 

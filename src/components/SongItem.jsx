@@ -6,7 +6,10 @@ const SongItem = ({ name, image, desc, id, isSpotifyTrack = false }) => {
   const { playWithId } = useContext(PlayerContext);
   const [isHovered, setIsHovered] = useState(false);
 
-  const handlePlay = () => {
+  const handlePlay = (e) => {
+    if (e) {
+      e.stopPropagation();
+    }
     playWithId(id, isSpotifyTrack);
   };
 
